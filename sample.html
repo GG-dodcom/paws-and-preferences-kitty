@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paws & Preferences: Find Your Favourite Kitty</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .card {
+            transition: transform 0.3s ease, opacity 0.3s ease;
+        }
+        .card.swiping-left {
+            transform: translateX(-100%) rotate(-10deg);
+            opacity: 0;
+        }
+        .card.swiping-right {
+            transform: translateX(100%) rotate(10deg);
+            opacity: 0;
+        }
+        .like-stamp, .dislike-stamp {
+            position: absolute;
+            top: 20px;
+            font-size: 2rem;
+            font-weight: bold;
+            padding: 10px 20px;
+            border: 4px solid;
+            transform: rotate(-20deg);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        .like-stamp {
+            color: #10B981;
+            border-color: #10B981;
+            left: 20px;
+        }
+        .dislike-stamp {
+            color: #EF4444;
+            border-color: #EF4444;
+            right: 20px;
+        }
+        .stamp-visible {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen">
+    <div id="app" class="w-full max-w-md p-4">
+        <!-- Start Screen -->
+        <div id="start-screen" class="flex flex-col items-center justify-center h-screen">
+            <h1 class="text-3xl font-bold text-gray-800 mb-4">Paws & Preferences</h1>
+            <p class="text-lg text-gray-600 mb-6">Swipe right to like a kitty, left to dislike!</p>
+            <button id="start-button" class="bg-blue-500 text-white px-6 py-3 rounded-lg text-lg font-semibold hover:bg-blue-600">Start Swiping</button>
+        </div>
+
+        <!-- Card Stack -->
+        <div id="card-stack" class="hidden relative h-[500px] w-full">
+            <div id="card-container" class="relative w-full h-full"></div>
+        </div>
+
+        <!-- Summary Screen -->
+        <div id="summary-screen" class="hidden flex flex-col items-center justify-center h-screen">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">Your Favorite Kitties!</h2>
+            <p id="summary-text" class="text-lg text-gray-600 mb-6"></p>
+            <div id="liked-cats" class="grid grid-cols-2 gap-4 w-full"></div>
+            <button id="restart-button" class="bg-blue-500 text-white px-6 py-3 rounded-lg text-lg font-semibold hover:bg-blue-600 mt-6">Try Again</button>
+        </div>
+    </div>
+
+    <script>
+        const NUM_CATS = 10;
+        const CAT_API_URL = 'https://cataas.com/cat?json=true';
+        let cats = [];
+        let likedCats = [];
+        let currentCatIndex = 0;
+
+        // DOM Elements
+        const startScreen = document.getElementById('start-screen');
+        const cardStack = document.getElementById('card-stack');
+        const summaryScreen = document.getElementById('summary-screen');
+        const cardContainer = document.getElementById('card-container');
+        const summaryText = document.getElementById('summary-text');
+        const likedCatsContainer = document.getElementById('liked-cats');
+        const startButton = document.getElementById('start-button');
+        const restartButton = document.getElementById('restart-button');
+
+        // Fetch cat images
+        async function fetchCats() {
+            for (let i = 0; i < NUM_CATS; i++) {
+                try {
+                    const response = await fetch(CAT_API_URL);
+                    const data = await response.json();
+                    cats.push({ id: i, url: `https://cataas.com${data.url}` });
+                } catch (error) {
+                    console.error('Error fetching cat:', error);
+                }
+            }
+            renderNextCat();
+        }
+
+        // Render the next cat card
+        function renderNextCat() {
+            if (currentCatIndex >= cats.length) {
+                showSummary();
+                return;
+            }
+
+            const cat = cats[currentCatIndex];
+            const card = document.createElement('div');
+            card.className = 'card absolute w-full h-full bg-white rounded-lg shadow-lg overflow-hidden';
+            card.innerHTML = `
+                <img src="${cat.url}" alt="Cat" class="w-full h-full object-cover">
+                <div class="like-stamp">LIKE</div>
+                <div class="dislike-stamp">DISLIKE</div>
+            `;
+            cardContainer.appendChild(card);
+            addSwipeListeners(card);
+        }
+
+        // Add swipe gesture listeners
+        function addSwipeListeners(card) {
+            let startX = 0;
+            let currentX = 0;
+            let isDragging = false;
+
+            card.addEventListener('touchstart', (e) => {
+                startX = e.touches[0].clientX;
+                isDragging = true;
+            });
+
+            card.addEventListener('touchmove', (e) => {
+                if (!isDragging) return;
+                currentX = e.touches[0].clientX;
+                const diffX = currentX - startX;
+                card.style.transform = `translateX(${diffX}px) rotate(${diffX / 20}deg)`;
+                
+                // Show like/dislike stamps
+                const likeStamp = card.querySelector('.like-stamp');
+                const dislikeStamp = card.querySelector('.dislike-stamp');
+                if (diffX > 50) {
+                    likeStamp.classList.add('stamp-visible');
+                    dislikeStamp.classList.remove('stamp-visible');
+                } else if (diffX < -50) {
+                    dislikeStamp.classList.add('stamp-visible');
+                    likeStamp.classList.remove('stamp-visible');
+                } else {
+                    likeStamp.classList.remove('stamp-visible');
+                    dislikeStamp.classList.remove('stamp-visible');
+                }
+            });
+
+            card.addEventListener('touchend', () => {
+                isDragging = false;
+                const diffX = currentX - startX;
+                if (Math.abs(diffX) > 100) {
+                    if (diffX > 0) {
+                        // Swipe right (like)
+                        card.classList.add('swiping-right');
+                        likedCats.push(cats[currentCatIndex]);
+                    } else {
+                        // Swipe left (dislike)
+                        card.classList.add('swiping-left');
+                    }
+                    setTimeout(() => {
+                        card.remove();
+                        currentCatIndex++;
+                        renderNextCat();
+                    }, 300);
+                } else {
+                    // Reset position
+                    card.style.transform = '';
+                    card.querySelector('.like-stamp').classList.remove('stamp-visible');
+                    card.querySelector('.dislike-stamp').classList.remove('stamp-visible');
+                }
+            });
+        }
+
+        // Show summary screen
+        function showSummary() {
+            cardStack.classList.add('hidden');
+            summaryScreen.classList.remove('hidden');
+            summaryText.textContent = `You liked ${likedCats.length} out of ${cats.length} cats!`;
+            likedCatsContainer.innerHTML = '';
+            likedCats.forEach(cat => {
+                const img = document.createElement('img');
+                img.src = cat.url;
+                img.alt = 'Liked Cat';
+                img.className = 'w-full h-32 object-cover rounded-lg';
+                likedCatsContainer.appendChild(img);
+            });
+        }
+
+        // Reset the app
+        function resetApp() {
+            cats = [];
+            likedCats = [];
+            currentCatIndex = 0;
+            cardContainer.innerHTML = '';
+            summaryScreen.classList.add('hidden');
+            startScreen.classList.remove('hidden');
+            fetchCats();
+        }
+
+        // Event listeners
+        startButton.addEventListener('click', () => {
+            startScreen.classList.add('hidden');
+            cardStack.classList.remove('hidden');
+            fetchCats();
+        });
+
+        restartButton.addEventListener('click', resetApp);
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            // Start screen is visible by default
+        });
+    </script>
+</body>
+</html>

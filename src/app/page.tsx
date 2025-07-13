@@ -1,103 +1,197 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useEffect } from 'react';
+import Image from 'next/image';
+
+interface Cat {
+  id: number;
+  url: string;
+}
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const NUM_CATS = 10;
+  const CAT_API_URL = 'https://cataas.com/cat?json=true';
+  const [cats, setCats] = useState<Cat[]>([]);
+  const [likedCats, setLikedCats] = useState<Cat[]>([]);
+  const [currentCatIndex, setCurrentCatIndex] = useState(0);
+  const [screen, setScreen] = useState<'start' | 'cards' | 'summary'>('start');
+  const [isSwiping, setIsSwiping] = useState(false);
+  const [swipeOffset, setSwipeOffset] = useState(0);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  // Fetch cat images
+  useEffect(() => {
+    if (screen === 'cards' && cats.length === 0) {
+      const fetchCats = async () => {
+        const newCats: Cat[] = [];
+        for (let i = 0; i < NUM_CATS; i++) {
+          try {
+            const response = await fetch(CAT_API_URL);
+            const data = await response.json();
+            newCats.push({ id: i, url: `https://cataas.com${data.url}` });
+          } catch (error) {
+            console.error('Error fetching cat:', error);
+          }
+        }
+        setCats(newCats);
+      };
+      fetchCats();
+    }
+  }, [screen]);
+
+  // Handle swipe gestures
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    setIsSwiping(true);
+    setSwipeOffset(e.touches[0].clientX);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isSwiping) return;
+    const currentX = e.touches[0].clientX;
+    const diffX = currentX - swipeOffset;
+    const card = document.getElementById(`cat-card-${currentCatIndex}`);
+    if (card) {
+      card.style.transform = `translateX(${diffX}px) rotate(${diffX / 20}deg)`;
+      const likeStamp = card.querySelector('.like-stamp');
+      const dislikeStamp = card.querySelector('.dislike-stamp');
+      if (diffX > 50) {
+        likeStamp?.classList.add('stamp-visible');
+        dislikeStamp?.classList.remove('stamp-visible');
+      } else if (diffX < -50) {
+        dislikeStamp?.classList.add('stamp-visible');
+        likeStamp?.classList.remove('stamp-visible');
+      } else {
+        likeStamp?.classList.remove('stamp-visible');
+        dislikeStamp?.classList.remove('stamp-visible');
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsSwiping(false);
+    const card = document.getElementById(`cat-card-${currentCatIndex}`);
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    const diffX = swipeOffset - (rect.left + rect.width / 2);
+    if (Math.abs(diffX) > 100) {
+      card.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+      card.style.opacity = '0';
+      if (diffX > 0) {
+        card.style.transform = `translateX(100%) rotate(10deg)`;
+        setLikedCats([...likedCats, cats[currentCatIndex]]);
+      } else {
+        card.style.transform = `translateX(-100%) rotate(-10deg)`;
+      }
+      setTimeout(() => {
+        setCurrentCatIndex((prev) => {
+          const nextIndex = prev + 1;
+          if (nextIndex >= cats.length) {
+            setScreen('summary');
+            return prev;
+          }
+          return nextIndex;
+        });
+        card.style.transition = '';
+        card.style.transform = '';
+        card.style.opacity = '1';
+      }, 300);
+    } else {
+      card.style.transition = 'transform 0.3s ease';
+      card.style.transform = '';
+      card.querySelector('.like-stamp')?.classList.remove('stamp-visible');
+      card.querySelector('.dislike-stamp')?.classList.remove('stamp-visible');
+      setTimeout(() => {
+        card.style.transition = '';
+      }, 300);
+    }
+  };
+
+  // Reset the app
+  const resetApp = () => {
+    setCats([]);
+    setLikedCats([]);
+    setCurrentCatIndex(0);
+    setScreen('start');
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 w-full max-w-md mx-auto p-4">
+      {/* Start Screen */}
+      {screen === 'start' && (
+        <div className="flex flex-col items-center justify-center h-screen">
+          <h1 className="text-3xl font-bold text-gray-800 mb-4">
+            Paws & Preferences
+          </h1>
+          <p className="text-lg text-gray-600 mb-6">
+            Swipe right to like a kitty, left to dislike!
+          </p>
+          <button
+            onClick={() => setScreen('cards')}
+            className="bg-blue-500 text-white px-6 py-3 rounded-lg text-lg font-semibold hover:bg-blue-600"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            Start Swiping
+          </button>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      )}
+
+      {/* Card Stack */}
+      {screen === 'cards' && (
+        <div className="relative h-[500px] w-full">
+          {cats[currentCatIndex] && (
+            <div
+              id={`cat-card-${currentCatIndex}`}
+              className="absolute w-full h-full bg-white rounded-lg shadow-lg overflow-hidden"
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
+              <Image
+                src={cats[currentCatIndex].url}
+                alt="Cat"
+                fill
+                className="object-cover"
+                unoptimized
+              />
+              <div className="like-stamp absolute top-5 left-5 text-2xl font-bold text-green-500 border-4 border-green-500 p-2 rotate-[-20deg] opacity-0 transition-opacity duration-200">
+                LIKE
+              </div>
+              <div className="dislike-stamp absolute top-5 right-5 text-2xl font-bold text-red-500 border-4 border-red-500 p-2 rotate-[-20deg] opacity-0 transition-opacity duration-200">
+                DISLIKE
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Summary Screen */}
+      {screen === 'summary' && (
+        <div className="flex flex-col items-center justify-center h-screen">
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">
+            Your Favorite Kitties!
+          </h2>
+          <p className="text-lg text-gray-600 mb-6">
+            You liked {likedCats.length} out of {cats.length} cats!
+          </p>
+          <div className="grid grid-cols-2 gap-4 w-full">
+            {likedCats.map((cat) => (
+              <Image
+                key={cat.id}
+                src={cat.url}
+                alt="Liked Cat"
+                width={150}
+                height={100}
+                className="w-full h-32 object-cover rounded-lg"
+                unoptimized
+              />
+            ))}
+          </div>
+          <button
+            onClick={resetApp}
+            className="bg-blue-500 text-white px-6 py-3 rounded-lg text-lg font-semibold hover:bg-blue-600 mt-6"
+          >
+            Try Again
+          </button>
+        </div>
+      )}
     </div>
   );
 }
